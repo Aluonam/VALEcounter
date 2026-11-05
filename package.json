@@ -1,0 +1,10 @@
+{
+  "name": "vale-counter",
+  "version": "0.1.0",
+  "description": "Contador colaborativo en tiempo real de las veces que un ponente dice «vale»",
+  "scripts": {
+    "start": "npx --yes serve public -l 3000",
+    "test": "node test/game.test.js"
+  },
+  "license": "MIT"
+}
