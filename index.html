@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>Contador de «vales»</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <canvas id="confetti"></canvas>
+
+  <header class="top">
+    <div class="brand">«vale» counter</div>
+    <div class="meta">
+      <span id="room-chip" class="chip"></span>
+      <span id="speaker" class="chip"></span>
+      <span id="phase" class="chip"></span>
+      <span id="online" class="chip" title="Personas conectadas"></span>
+      <span id="conn" class="dot" title="Conexión"></span>
+    </div>
+  </header>
+
+  <main>
+    <!-- Pantalla 0: inicio -->
+    <section id="screen-landing" class="screen hidden">
+      <h1>Contador de «vales»</h1>
+      <p class="muted">Cuenta entre todos las veces que el ponente dice «vale». Un «vale» solo cuenta si dos personas pulsan a la vez.</p>
+      <form id="room-form" class="row">
+        <input id="room-input" type="text" maxlength="8" placeholder="Código de sala" autocomplete="off" style="text-transform:uppercase" />
+        <button type="submit" class="primary">Unirme</button>
+      </form>
+      <p class="muted">¿Vas a proyectar?</p>
+      <button id="create" type="button">Crear sala en esta pantalla</button>
+    </section>
+
+    <!-- Pantalla 1: nombre -->
+    <section id="screen-join" class="screen hidden">
+      <h1>¿Cómo te llamas?</h1>
+      <form id="join-form" class="row">
+        <input id="name" type="text" maxlength="24" placeholder="Tu nombre" autocomplete="off" required />
+        <button type="submit" class="primary">Entrar</button>
+      </form>
+      <p id="join-hint" class="muted"></p>
+    </section>
+
+    <!-- Pantalla 2: lobby con apuestas -->
+    <section id="screen-lobby" class="screen hidden">
+      <h1>Apuestas abiertas</h1>
+      <p class="muted">¿Cuántos «vales» dirá el ponente? Quien más se acerque, gana.</p>
+      <form id="bet-form" class="row">
+        <input id="bet" type="number" min="0" max="9999" placeholder="Tu apuesta" />
+        <button type="submit" class="primary">Apostar</button>
+      </form>
+      <p id="my-bet" class="winner"></p>
+      <ul id="bets" class="list"></ul>
+
+      <details class="host-box" id="start-box">
+        <summary>Empezar la charla</summary>
+        <form id="start-form" class="row">
+          <input id="speaker-input" type="text" maxlength="60" placeholder="Nombre del ponente" />
+          <button type="submit" class="primary">¡Empezar!</button>
+        </form>
+      </details>
+    </section>
+
+    <!-- Pantalla 3: en vivo -->
+    <section id="screen-live" class="screen hidden">
+      <div class="counter">
+        <div id="count" class="count">0</div>
+        <div class="sub">
+          <span id="streak" class="chip hot hidden"></span>
+          <span id="timer" class="chip"></span>
+        </div>
+      </div>
+
+      <div id="heard" class="heard hidden">
+        <div class="heard-text"></div>
+        <div class="heard-bar"><i></i></div>
+      </div>
+
+      <button id="tap" class="tap" type="button">
+        <span>VALE</span>
+        <small>o pulsa espacio</small>
+      </button>
+
+      <section class="panel">
+        <h2>Vales por minuto</h2>
+        <div class="viz-root">
+          <canvas id="chart" height="160"></canvas>
+          <div id="tooltip" class="tooltip hidden"></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Logros</h2>
+        <ul id="achievements" class="list achievements"><li class="muted">Todavía ninguno…</li></ul>
+      </section>
+
+      <section class="panel">
+        <h2>Reflejos (primero en pulsar)</h2>
+        <ol id="ranking" class="list"></ol>
+      </section>
+
+      <details class="host-box">
+        <summary>Terminar la charla</summary>
+        <button id="finish" class="danger" type="button">Terminar y generar informe</button>
+      </details>
+    </section>
+
+    <!-- Pantalla 4: informe final -->
+    <section id="screen-report" class="screen hidden">
+      <h1>Informe final</h1>
+      <p id="report-headline" class="headline"></p>
+      <div class="tiles">
+        <div class="tile"><div class="tile-label">Total</div><div id="r-total" class="tile-value"></div></div>
+        <div class="tile"><div class="tile-label">Duración</div><div id="r-duration" class="tile-value"></div></div>
+        <div class="tile"><div class="tile-label">Un «vale» cada</div><div id="r-rate" class="tile-value"></div></div>
+        <div class="tile"><div class="tile-label">Minuto más intenso</div><div id="r-peak" class="tile-value"></div></div>
+      </div>
+
+      <section class="panel">
+        <h2>Vales por minuto</h2>
+        <div class="viz-root">
+          <canvas id="chart-report" height="160"></canvas>
+          <div id="tooltip-report" class="tooltip hidden"></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Apuestas</h2>
+        <p id="r-betwinner" class="winner"></p>
+        <ul id="r-bets" class="list"></ul>
+      </section>
+
+      <section class="panel">
+        <h2>Podio de reflejos</h2>
+        <ul id="r-podium" class="list"></ul>
+      </section>
+
+      <section class="panel">
+        <h2>Logros desbloqueados</h2>
+        <ul id="r-achievements" class="list achievements"></ul>
+      </section>
+
+      <div class="row">
+        <button id="copy" class="primary" type="button">Copiar informe (Markdown)</button>
+        <button id="reset" type="button">Nueva charla</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- Modo proyector: ?host -->
+  <aside id="host-panel" class="hidden">
+    <div class="host-url">
+      <img id="qr" alt="QR para unirse" />
+      <div>
+        <div class="muted">Sala <b id="room-code"></b> · únete en</div>
+        <div id="url" class="url"></div>
+      </div>
+    </div>
+  </aside>
+
+  <div id="toasts"></div>
+
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="game.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
