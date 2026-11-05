@@ -3,74 +3,138 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
-  <title>Contador de «vales»</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎤</text></svg>" />
+  <title>¿VALE? · el contador del equipo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Lilita+One&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <canvas id="confetti"></canvas>
 
   <header class="top">
-    <div class="brand">«vale» counter</div>
+    <a class="logo" href="./" title="Inicio">¿VALE?</a>
     <div class="meta">
-      <span id="room-chip" class="chip"></span>
+      <button id="room-chip" class="chip chip-btn hidden" type="button" title="Invitar a más gente"></button>
       <span id="speaker" class="chip"></span>
-      <span id="phase" class="chip"></span>
-      <span id="online" class="chip" title="Personas conectadas"></span>
-      <span id="conn" class="dot" title="Conexión"></span>
+      <span class="chip chip-online" title="Personas conectadas"><i id="conn" class="dot"></i><span id="online"></span></span>
     </div>
   </header>
 
+  <div id="banner" class="banner hidden" role="status"></div>
+
   <main>
-    <!-- Pantalla 0: inicio -->
+    <!-- Inicio -->
     <section id="screen-landing" class="screen hidden">
-      <h1>Contador de «vales»</h1>
-      <p class="muted">Cuenta entre todos las veces que el ponente dice «vale». Un «vale» solo cuenta si dos personas pulsan a la vez.</p>
-      <form id="room-form" class="row">
-        <input id="room-input" type="text" maxlength="8" placeholder="Código de sala" autocomplete="off" style="text-transform:uppercase" />
-        <button type="submit" class="primary">Unirme</button>
-      </form>
-      <p class="muted">¿Vas a proyectar?</p>
-      <button id="create" type="button">Crear sala en esta pantalla</button>
-    </section>
+      <div class="hero">
+        <div class="hero-bubble">¿vale?</div>
+        <h1>El contador de «vales» del equipo</h1>
+        <p class="lead">Escuchad la charla y pulsad cada vez que suene un «vale». Solo cuenta si <b>dos personas</b> lo pillan a la vez. 👂👂</p>
+      </div>
 
-    <!-- Pantalla 1: nombre -->
-    <section id="screen-join" class="screen hidden">
-      <h1>¿Cómo te llamas?</h1>
-      <form id="join-form" class="row">
-        <input id="name" type="text" maxlength="24" placeholder="Tu nombre" autocomplete="off" required />
-        <button type="submit" class="primary">Entrar</button>
-      </form>
-      <p id="join-hint" class="muted"></p>
-    </section>
-
-    <!-- Pantalla 2: lobby con apuestas -->
-    <section id="screen-lobby" class="screen hidden">
-      <h1>Apuestas abiertas</h1>
-      <p class="muted">¿Cuántos «vales» dirá el ponente? Quien más se acerque, gana.</p>
-      <form id="bet-form" class="row">
-        <input id="bet" type="number" min="0" max="9999" placeholder="Tu apuesta" />
-        <button type="submit" class="primary">Apostar</button>
-      </form>
-      <p id="my-bet" class="winner"></p>
-      <ul id="bets" class="list"></ul>
-
-      <details class="host-box" id="start-box">
-        <summary>Empezar la charla</summary>
-        <form id="start-form" class="row">
-          <input id="speaker-input" type="text" maxlength="60" placeholder="Nombre del ponente" />
-          <button type="submit" class="primary">¡Empezar!</button>
+      <div class="card">
+        <h2>🔑 Tengo un código</h2>
+        <form id="room-form" class="row" novalidate>
+          <input id="room-input" class="code-input" type="text" maxlength="6" placeholder="K7PX" autocomplete="off" autocapitalize="characters" spellcheck="false" />
+          <button type="submit" class="btn btn-purple">Entrar</button>
         </form>
-      </details>
+        <p id="room-error" class="field-error hidden" role="alert"></p>
+      </div>
+
+      <div class="card card-tilt">
+        <h2>✨ Soy el primero</h2>
+        <p class="muted">Crea una sala para el grupo y pasa el código a los demás.</p>
+        <button id="create" type="button" class="btn btn-orange wide">Crear sala de grupo</button>
+      </div>
     </section>
 
-    <!-- Pantalla 3: en vivo -->
+    <!-- Conectando -->
+    <section id="screen-connecting" class="screen hidden">
+      <div class="center-box">
+        <div class="spinner">🎧</div>
+        <h1 id="connecting-title">Buscando la sala…</h1>
+        <p id="connecting-text" class="muted"></p>
+      </div>
+    </section>
+
+    <!-- Error -->
+    <section id="screen-error" class="screen hidden">
+      <div class="card card-error center-box">
+        <div id="err-emoji" class="big-emoji">🤔</div>
+        <h1 id="err-title"></h1>
+        <p id="err-text"></p>
+        <div class="row stack-mobile">
+          <button id="err-other" type="button" class="btn btn-purple">Probar otro código</button>
+          <button id="err-retry" type="button" class="btn">Reintentar</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Nombre -->
+    <section id="screen-join" class="screen hidden">
+      <div class="card">
+        <h1>¿Cómo te llamamos? 🙋</h1>
+        <form id="join-form" class="row" novalidate>
+          <input id="name" type="text" maxlength="24" placeholder="Tu nombre o mote" autocomplete="off" />
+          <button type="submit" class="btn btn-purple">¡Dentro!</button>
+        </form>
+        <p id="name-error" class="field-error hidden" role="alert"></p>
+      </div>
+    </section>
+
+    <!-- Lobby -->
+    <section id="screen-lobby" class="screen hidden">
+      <div class="card card-yellow">
+        <h1>🎲 Hagan sus apuestas</h1>
+        <p class="muted">¿Cuántos «vales» caerán hoy? Quien más se acerque, gana. Si la clavas, eres <b>Oráculo</b>.</p>
+        <form id="bet-form" class="row" novalidate>
+          <input id="bet" type="number" min="0" max="999" inputmode="numeric" placeholder="Tu apuesta" />
+          <button type="submit" class="btn btn-pink">Apostar</button>
+        </form>
+        <p id="bet-error" class="field-error hidden" role="alert"></p>
+        <p id="my-bet" class="my-bet"></p>
+      </div>
+
+      <div class="card">
+        <h2>👥 En la sala</h2>
+        <ul id="bets" class="people"></ul>
+      </div>
+
+      <div class="card invite">
+        <h2>📣 Invita al resto</h2>
+        <div class="invite-body">
+          <img class="qr" alt="Código QR para unirse a la sala" />
+          <div>
+            <div class="muted">Código de sala</div>
+            <div class="room-code"></div>
+            <button type="button" class="btn btn-small copy-link">Copiar enlace</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card card-teal">
+        <h2>🎤 ¿Quién habla hoy?</h2>
+        <form id="start-form" class="row stack-mobile" novalidate>
+          <input id="speaker-input" type="text" maxlength="60" placeholder="Nombre de quien presenta" />
+          <button type="submit" class="btn btn-orange">¡Que empiece el show!</button>
+        </form>
+        <p id="start-error" class="field-error hidden" role="alert"></p>
+      </div>
+
+      <p id="host-note" class="host-note hidden">📱 Esta sala vive en tu dispositivo. No cierres esta pestaña hasta el informe final.</p>
+    </section>
+
+    <!-- En directo -->
     <section id="screen-live" class="screen hidden">
       <div class="counter">
         <div id="count" class="count">0</div>
+        <div class="count-label">«vales» confirmados</div>
         <div class="sub">
-          <span id="streak" class="chip hot hidden"></span>
+          <span id="streak" class="chip chip-hot hidden"></span>
           <span id="timer" class="chip"></span>
         </div>
+        <div id="pop" class="pop"></div>
       </div>
 
       <div id="heard" class="heard hidden">
@@ -79,86 +143,92 @@
       </div>
 
       <button id="tap" class="tap" type="button">
-        <span>VALE</span>
+        <span>¡VALE!</span>
         <small>o pulsa espacio</small>
       </button>
 
-      <section class="panel">
-        <h2>Vales por minuto</h2>
+      <div class="card">
+        <h2>📊 Vales por minuto</h2>
         <div class="viz-root">
           <canvas id="chart" height="160"></canvas>
           <div id="tooltip" class="tooltip hidden"></div>
         </div>
-      </section>
+      </div>
 
-      <section class="panel">
-        <h2>Logros</h2>
-        <ul id="achievements" class="list achievements"><li class="muted">Todavía ninguno…</li></ul>
-      </section>
+      <div class="card">
+        <h2>🏆 Logros</h2>
+        <ul id="achievements" class="stickers"></ul>
+      </div>
 
-      <section class="panel">
-        <h2>Reflejos (primero en pulsar)</h2>
-        <ol id="ranking" class="list"></ol>
-      </section>
+      <div class="card">
+        <h2>⚡ Los más rápidos</h2>
+        <ol id="ranking" class="people ranked"></ol>
+      </div>
 
-      <details class="host-box">
+      <details class="end-box">
         <summary>Terminar la charla</summary>
-        <button id="finish" class="danger" type="button">Terminar y generar informe</button>
+        <button id="finish" class="btn btn-ink wide" type="button">🏁 Terminar y ver el informe</button>
       </details>
     </section>
 
-    <!-- Pantalla 4: informe final -->
+    <!-- Informe -->
     <section id="screen-report" class="screen hidden">
-      <h1>Informe final</h1>
-      <p id="report-headline" class="headline"></p>
-      <div class="tiles">
-        <div class="tile"><div class="tile-label">Total</div><div id="r-total" class="tile-value"></div></div>
-        <div class="tile"><div class="tile-label">Duración</div><div id="r-duration" class="tile-value"></div></div>
-        <div class="tile"><div class="tile-label">Un «vale» cada</div><div id="r-rate" class="tile-value"></div></div>
-        <div class="tile"><div class="tile-label">Minuto más intenso</div><div id="r-peak" class="tile-value"></div></div>
+      <div class="report-head">
+        <div class="hero-bubble small">¡fin!</div>
+        <h1>Informe final</h1>
+        <p id="report-headline" class="lead"></p>
       </div>
 
-      <section class="panel">
-        <h2>Vales por minuto</h2>
+      <div class="tiles">
+        <div class="tile t-purple"><div class="tile-label">Total</div><div id="r-total" class="tile-value"></div></div>
+        <div class="tile t-orange"><div class="tile-label">Duración</div><div id="r-duration" class="tile-value"></div></div>
+        <div class="tile t-teal"><div class="tile-label">Un «vale» cada</div><div id="r-rate" class="tile-value"></div></div>
+        <div class="tile t-pink"><div class="tile-label">Minuto más intenso</div><div id="r-peak" class="tile-value"></div></div>
+      </div>
+
+      <div class="card">
+        <h2>📊 Vales por minuto</h2>
         <div class="viz-root">
           <canvas id="chart-report" height="160"></canvas>
           <div id="tooltip-report" class="tooltip hidden"></div>
         </div>
-      </section>
+      </div>
 
-      <section class="panel">
-        <h2>Apuestas</h2>
+      <div class="card card-yellow">
+        <h2>🎯 Apuestas</h2>
         <p id="r-betwinner" class="winner"></p>
-        <ul id="r-bets" class="list"></ul>
-      </section>
+        <ul id="r-bets" class="people"></ul>
+      </div>
 
-      <section class="panel">
-        <h2>Podio de reflejos</h2>
-        <ul id="r-podium" class="list"></ul>
-      </section>
+      <div class="card">
+        <h2>⚡ Podio de reflejos</h2>
+        <ul id="r-podium" class="people"></ul>
+      </div>
 
-      <section class="panel">
-        <h2>Logros desbloqueados</h2>
-        <ul id="r-achievements" class="list achievements"></ul>
-      </section>
+      <div class="card">
+        <h2>🏆 Logros desbloqueados</h2>
+        <ul id="r-achievements" class="stickers"></ul>
+      </div>
 
-      <div class="row">
-        <button id="copy" class="primary" type="button">Copiar informe (Markdown)</button>
-        <button id="reset" type="button">Nueva charla</button>
+      <div class="row stack-mobile">
+        <button id="copy" class="btn btn-purple" type="button">📋 Copiar informe</button>
+        <button id="reset" class="btn" type="button">🔁 Otra charla</button>
       </div>
     </section>
   </main>
 
-  <!-- Modo proyector: ?host -->
-  <aside id="host-panel" class="hidden">
-    <div class="host-url">
-      <img id="qr" alt="QR para unirse" />
+  <dialog id="invite-dialog" class="invite">
+    <h2>📣 Invita al resto</h2>
+    <div class="invite-body">
+      <img class="qr" alt="Código QR para unirse a la sala" />
       <div>
-        <div class="muted">Sala <b id="room-code"></b> · únete en</div>
-        <div id="url" class="url"></div>
+        <div class="muted">Código de sala</div>
+        <div class="room-code"></div>
+        <button type="button" class="btn btn-small copy-link">Copiar enlace</button>
       </div>
     </div>
-  </aside>
+    <form method="dialog"><button class="btn wide">Cerrar</button></form>
+  </dialog>
 
   <div id="toasts"></div>
 
