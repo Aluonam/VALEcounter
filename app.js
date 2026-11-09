@@ -1,4 +1,4 @@
-// vale-counter — cliente.
+// VALEcounter — cliente.
 // Sala de grupo: quien la crea juega como uno más, pero su navegador guarda el
 // estado y reparte las actualizaciones vía PeerJS (WebRTC). No hay backend.
 
