@@ -1,5 +1,7 @@
 # «vale» counter 🎤
 
+**▶️ Jugar ahora: https://aluonam.github.io/vale-counter/**
+
 Contador colaborativo, en tiempo real, de las veces que un ponente dice **«vale»**.
 Pensado para equipos de unas 10 personas, cada uno con su móvil. No hace falta proyector ni cuenta.
 
@@ -57,7 +59,13 @@ npm start   # sirve public/ en http://localhost:3000
 npm test    # pruebas de la lógica del juego
 ```
 
-Despliegue: cualquier hosting estático. En Vercel basta con `vercel deploy --prod` (usa `vercel.json`).
+Despliegue: cualquier hosting estático. Está publicado en GitHub Pages desde la rama `gh-pages`, que contiene `public/`:
+
+```bash
+git subtree split --prefix public -b tmp && git push -f origin tmp:gh-pages && git branch -D tmp
+```
+
+En Vercel basta con `vercel deploy --prod` (usa `vercel.json`).
 
 Parámetros del juego en `public/game.js` (`DEFAULTS`): personas para consenso, ventana, cooldown y tiempo de silencio.
 
