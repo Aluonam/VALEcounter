@@ -1,5 +1,5 @@
 {
-  "name": "vale-counter",
+  "name": "valecounter",
   "version": "0.1.0",
   "description": "Contador colaborativo en tiempo real de las veces que un ponente dice «vale»",
   "scripts": {

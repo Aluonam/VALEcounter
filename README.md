@@ -1,6 +1,6 @@
-# «vale» counter 🎤
+# VALEcounter 🎤
 
-**▶️ Jugar ahora: https://aluonam.github.io/vale-counter/**
+**▶️ Jugar ahora: https://aluonam.github.io/VALEcounter/**
 
 Contador colaborativo, en tiempo real, de las veces que un ponente dice **«vale»**.
 Pensado para equipos de unas 10 personas, cada uno con su móvil. No hace falta proyector ni cuenta.

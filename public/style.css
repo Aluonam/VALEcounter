@@ -51,6 +51,8 @@ p { margin: 6px 0; }
   background: var(--pink); border: var(--border); border-radius: 14px; padding: 0 12px 2px;
   box-shadow: var(--shadow-sm); transform: rotate(-3deg); white-space: nowrap;
 }
+.logo span { font-size: 0.72em; letter-spacing: 0.02em; }
+.tagline { font-family: var(--display); font-size: 1.2rem; color: var(--purple); margin: -4px 0 6px; }
 .meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .chip {
   background: var(--paper); border: 2px solid var(--ink); border-radius: 999px;
