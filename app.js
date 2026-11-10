@@ -432,7 +432,7 @@
     drawChart($('#chart-report'), $('#tooltip-report'), r.perMinute);
   }
 
-  const vales = (n) => `${n} ${n === 1 ? '«vale»' : '«vales»'}`;
+  function vales(n) { return `${n} ${n === 1 ? '«vale»' : '«vales»'}`; }
   function miss(bet, total) {
     const d = bet - total;
     if (d === 0) return '¡exacto! 🔮';
