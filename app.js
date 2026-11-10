@@ -377,7 +377,7 @@
       $('#bets').innerHTML = list
         .map((u) => `<li class="${u.id === myId ? 'you' : ''} ${u.online ? '' : 'offline'}">${who(u)}<span class="tag ${u.bet == null ? '' : 'done'}">${u.bet == null ? 'pensando… 🤔' : 'apostado ✓'}</span></li>`)
         .join('');
-      $('#my-bet').textContent = me.bet != null ? `Tu apuesta: ${me.bet} «vales» 🤞` : '';
+      $('#my-bet').textContent = me.bet != null ? `Tu apuesta: ${vales(me.bet)} 🤞` : '';
       lastCount = null;
     }
 
@@ -420,19 +420,44 @@
     $('#r-rate').textContent = r.secondsPerVale ? `${r.secondsPerVale} s` : '—';
     $('#r-peak').textContent = r.peak.count ? `min ${r.peak.minute}` : '—';
 
-    const w = r.betWinners;
-    $('#r-betwinner').textContent = w.length
-      ? `🏅 ${w.map((x) => x.name).join(' y ')} ${w.length > 1 ? 'ganan' : 'gana'}: apostó ${w[0].bet} ${w[0].diff === 0 ? '¡y la clavó! 🔮' : `y se quedó a ${w[0].diff}`}`
-      : 'Nadie apostó esta vez 🤷';
+    $('#r-betwinner').textContent = betSummary(r);
     $('#r-bets').innerHTML = r.bets
       .slice().sort((a, b) => Math.abs(a.bet - r.total) - Math.abs(b.bet - r.total))
-      .map((b) => { const d = b.bet - r.total; return `<li>${who(b)}<span class="n">${b.bet} <span class="muted">(${d >= 0 ? '+' : ''}${d})</span></span></li>`; })
+      .map((b) => `<li>${who(b)}<span class="n">${b.bet} <span class="muted">· ${miss(b.bet, r.total)}</span></span></li>`)
       .join('');
     $('#r-podium').innerHTML = r.podium.length
       ? r.podium.map((p, i) => `<li>${who(p)}<span class="n">${['🥇', '🥈', '🥉'][i]} ${p.firsts} ${p.firsts === 1 ? 'vez' : 'veces'} primero</span></li>`).join('')
       : '<li class="muted">Sin datos.</li>';
     renderStickers($('#r-achievements'), r.achievements, 'Ningún logro esta vez.');
     drawChart($('#chart-report'), $('#tooltip-report'), r.perMinute);
+  }
+
+  const vales = (n) => `${n} ${n === 1 ? '«vale»' : '«vales»'}`;
+  function miss(bet, total) {
+    const d = bet - total;
+    if (d === 0) return '¡exacto! 🔮';
+    return d > 0 ? `se pasó por ${d}` : `se quedó corto por ${-d}`;
+  }
+  function betSummary(r) {
+    const hubo = `Hubo ${vales(r.total)}.`;
+    if (!r.bets.length) return `Nadie apostó esta vez 🤷 ${hubo}`;
+    if (r.bets.length === 1) {
+      const b = r.bets[0];
+      return b.bet === r.total
+        ? `🔮 Solo apostó ${b.name} y la clavó: ${vales(r.total)}.`
+        : `Solo apostó ${b.name}, así que no hay ganador. Dijo ${b.bet} y ${hubo.toLowerCase().replace('.', '')}: ${miss(b.bet, r.total)}.`;
+    }
+    const w = r.betWinners;
+    if (w.length === 1) {
+      return w[0].diff === 0
+        ? `🏅 Gana ${w[0].name}: dijo ${w[0].bet} y la clavó 🔮`
+        : `🏅 Gana ${w[0].name}: dijo ${w[0].bet} y ${miss(w[0].bet, r.total)}. ${hubo}`;
+    }
+    const names = w.map((x) => `${x.name} (${x.bet})`);
+    const list = names.slice(0, -1).join(', ') + ' y ' + names[names.length - 1];
+    return w[0].diff === 0
+      ? `🏅 Empate: ${list} la clavaron 🔮`
+      : `🏅 Empate entre ${list}: ${w.length === 2 ? 'los dos' : 'todos'} a ${w[0].diff} del total. ${hubo}`;
   }
 
   function headline(r) {
@@ -450,7 +475,7 @@
       '|---|---|---|---|',
       `| ${r.total} | ${fmtDur(r.durationMs)} | ${r.secondsPerVale ?? '—'} s | ${r.peak.count ? `min ${r.peak.minute} (${r.peak.count})` : '—'} |`,
       '',
-      `**🎯 Apuesta ganadora:** ${r.betWinners.length ? r.betWinners.map((w) => `${w.name} (${w.bet})`).join(', ') : 'nadie apostó'}`,
+      `**🎯 Apuestas:** ${betSummary(r)}`,
       `**⚡ Podio de reflejos:** ${r.podium.map((p, i) => `${['🥇', '🥈', '🥉'][i]} ${p.name} (${p.firsts})`).join(' · ') || '—'}`,
       `**🏆 Logros:** ${r.achievements.map((a) => `${ACH_ICONS[a.key] || '🏆'} ${a.title}${a.user ? ` (${a.user})` : ''}`).join(' · ') || '—'}`,
       `**📊 Vales por minuto:** ${r.perMinute.join(' ')}`,
