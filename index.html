@@ -17,8 +17,9 @@
     <a class="logo" href="./" title="Inicio">VALE<span>counter</span></a>
     <div class="meta">
       <button id="room-chip" class="chip chip-btn hidden" type="button" title="Invitar a más gente"></button>
-      <span id="speaker" class="chip"></span>
+      <span id="me-chip" class="chip"></span>
       <span class="chip chip-online" title="Personas conectadas"><i id="conn" class="dot"></i><span id="online"></span></span>
+      <button id="leave" class="chip chip-btn chip-leave hidden" type="button" title="Salir de la sala">🚪 Salir</button>
     </div>
   </header>
 
@@ -103,12 +104,9 @@
       </div>
 
       <div class="card card-teal">
-        <h2>🎤 ¿Quién habla hoy?</h2>
-        <form id="start-form" class="row stack-mobile" novalidate>
-          <input id="speaker-input" type="text" maxlength="60" placeholder="Nombre de quien presenta" />
-          <button type="submit" class="btn btn-orange">¡Que empiece el show!</button>
-        </form>
-        <p id="start-error" class="field-error hidden" role="alert"></p>
+        <h2>🎤 ¿Listos?</h2>
+        <p class="muted">Cuando arranque la charla, que cualquiera pulse aquí. Dura como máximo 2 h 10 min.</p>
+        <button id="start" type="button" class="btn btn-orange wide">¡Que empiece el show!</button>
       </div>
 
       <p id="host-note" class="host-note hidden">📱 Esta sala vive en tu dispositivo. No cierres esta pestaña hasta el informe final.</p>

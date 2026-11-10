@@ -19,12 +19,15 @@
   const rawRoom = params.get('room');
   const room = normalizeCode(rawRoom || '');
 
-  let myId = localStorage.getItem('vale-id');
+  // Identidad por pestaña (sessionStorage): dos pestañas del mismo navegador
+  // son dos personas distintas, y recargar no te cambia de identidad.
+  let myId = sessionStorage.getItem('vale-id');
   if (!myId) {
     myId = Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
-    localStorage.setItem('vale-id', myId);
+    sessionStorage.setItem('vale-id', myId);
   }
-  let myName = localStorage.getItem('vale-name') || '';
+  let myName = sessionStorage.getItem('vale-name') || '';
+  let leaving = false;
   let state = null;
   let lastCount = null;
   let send = () => {};
@@ -73,7 +76,7 @@
     };
     $('#create').onclick = () => {
       const code = Array.from({ length: 4 }, () => CODE_ABC[Math.floor(Math.random() * CODE_ABC.length)]).join('');
-      localStorage.setItem('vale-hosting', code);
+      sessionStorage.setItem('vale-hosting', code);
       location.search = `?room=${code}`;
     };
   }
@@ -91,7 +94,24 @@
   $('#room-chip').classList.remove('hidden');
   $('#room-chip').onclick = () => $('#invite-dialog').showModal();
 
-  if (localStorage.getItem('vale-hosting') === room) startHost();
+  $('#leave').classList.remove('hidden');
+  $('#leave').onclick = leaveRoom;
+  $('.logo').onclick = (e) => { e.preventDefault(); leaveRoom(); };
+  function leaveRoom() {
+    const others = state ? Object.values(state.users).filter((u) => u.id !== myId && u.online).length : 0;
+    const open = state && state.phase !== 'finished';
+    const closesForAll = isHost && others > 0 && open;
+    const msg = closesForAll
+      ? 'Esta sala vive en tu dispositivo: si sales, se cerrará para todos. ¿Salir igualmente?'
+      : '¿Salir de la sala?';
+    if ((closesForAll || (state && state.phase === 'live')) && !confirm(msg)) return;
+    leaving = true;
+    if (isHost) { sessionStorage.removeItem('vale-hosting'); localStorage.removeItem(`vale-host-${room}`); }
+    sessionStorage.removeItem('vale-name');
+    location.href = location.pathname;
+  }
+
+  if (sessionStorage.getItem('vale-hosting') === room) startHost();
   else startPlayer();
 
   function setConn(ok, label) {
@@ -163,7 +183,7 @@
     }
 
     window.addEventListener('beforeunload', (e) => {
-      if (state && state.phase !== 'finished' && Object.keys(state.users).length > 1) { e.preventDefault(); e.returnValue = ''; }
+      if (!leaving && state && state.phase !== 'finished' && Object.keys(state.users).length > 1) { e.preventDefault(); e.returnValue = ''; }
     });
 
     const peer = new Peer(PEER_PREFIX + room);
@@ -280,7 +300,7 @@
   }
 
   // ---------- Formularios ----------
-  $('#name').value = myName;
+  $('#name').value = myName || localStorage.getItem('vale-name') || '';
   $('#name').addEventListener('input', () => clearFieldError($('#name'), $('#name-error')));
   $('#join-form').onsubmit = (e) => {
     e.preventDefault();
@@ -289,6 +309,7 @@
     const taken = state && Object.values(state.users).some((u) => u.id !== myId && u.name.toLowerCase() === name.toLowerCase());
     if (taken) return fieldError($('#name'), $('#name-error'), `Ya hay alguien llamado «${name}». Añade una inicial o un mote.`);
     myName = name;
+    sessionStorage.setItem('vale-name', myName);
     localStorage.setItem('vale-name', myName);
     send({ type: 'join', id: myId, name: myName });
   };
@@ -304,13 +325,7 @@
     toastMsg('🎲', `Apuesta: ${n}`, 'Puedes cambiarla hasta que empiece la charla.');
   };
 
-  $('#speaker-input').addEventListener('input', () => clearFieldError($('#speaker-input'), $('#start-error')));
-  $('#start-form').onsubmit = (e) => {
-    e.preventDefault();
-    const sp = $('#speaker-input').value.trim();
-    if (!sp) return fieldError($('#speaker-input'), $('#start-error'), '¿Quién va a hablar? Escribe su nombre para el informe 🎤');
-    send({ type: 'start', speaker: sp });
-  };
+  $('#start').onclick = () => send({ type: 'start' });
 
   $('#finish').onclick = () => { if (confirm('¿Terminar la charla y ver el informe?')) send({ type: 'finish' }); };
   $('#reset').onclick = () => send({ type: 'reset' });
@@ -361,7 +376,7 @@
     state = st;
     const users = Object.values(st.users);
     const me = st.users[myId];
-    $('#speaker').textContent = st.speaker && st.phase !== 'lobby' ? `🎤 ${st.speaker}` : '';
+    $('#me-chip').textContent = me ? `🙋 ${me.name}` : '';
     $('#online').textContent = users.filter((u) => u.online).length;
 
     if (!myName || !me) {
@@ -417,7 +432,7 @@
     $('#report-headline').textContent = headline(r);
     $('#r-total').textContent = r.total;
     $('#r-duration').textContent = fmtDur(r.durationMs);
-    $('#r-rate').textContent = r.secondsPerVale ? `${r.secondsPerVale} s` : '—';
+    $('#r-rate').textContent = r.secondsPerVale ? rate(r.secondsPerVale, true) : '—';
     $('#r-peak').textContent = r.peak.count ? `min ${r.peak.minute}` : '—';
 
     $('#r-betwinner').textContent = betSummary(r);
@@ -460,20 +475,26 @@
       : `🏅 Empate entre ${list}: ${w.length === 2 ? 'los dos' : 'todos'} a ${w[0].diff} del total. ${hubo}`;
   }
 
+  function rate(sec, short = false) {
+    if (sec < 90) return short ? `${sec} s` : `${sec} segundos`;
+    const m = Math.round(sec / 60);
+    return short ? `${m} min` : `${m} minutos`;
+  }
+
   function headline(r) {
-    if (!r.total) return `${r.speaker} no dijo ni un solo «vale». ¡Leyenda! 👏`;
-    return `${r.speaker} dijo «vale» ${r.total} ${r.total === 1 ? 'vez' : 'veces'}: uno cada ${r.secondsPerVale} segundos.`;
+    if (!r.total) return 'No cayó ni un solo «vale». ¡Charla legendaria! 👏';
+    return `Cayeron ${vales(r.total)}: uno cada ${rate(r.secondsPerVale)}.`;
   }
 
   function reportMarkdown(r) {
     return [
-      `## 🎤 ${r.speaker} · ${new Date(r.date).toLocaleDateString('es-ES')}`,
+      `## 🎤 VALEcounter · ${new Date(r.date).toLocaleDateString('es-ES')}`,
       '',
       `**${headline(r)}**`,
       '',
       '| Total | Duración | Un vale cada | Minuto más intenso |',
       '|---|---|---|---|',
-      `| ${r.total} | ${fmtDur(r.durationMs)} | ${r.secondsPerVale ?? '—'} s | ${r.peak.count ? `min ${r.peak.minute} (${r.peak.count})` : '—'} |`,
+      `| ${r.total} | ${fmtDur(r.durationMs)} | ${r.secondsPerVale ? rate(r.secondsPerVale, true) : '—'} | ${r.peak.count ? `min ${r.peak.minute} (${r.peak.count})` : '—'} |`,
       '',
       `**🎯 Apuestas:** ${betSummary(r)}`,
       `**⚡ Podio de reflejos:** ${r.podium.map((p, i) => `${['🥇', '🥈', '🥉'][i]} ${p.name} (${p.firsts})`).join(' · ') || '—'}`,
@@ -503,6 +524,7 @@
       clearTimeout(heardTimer);
       heardTimer = setTimeout(() => el.classList.add('hidden'), ev.windowMs);
     }
+    if (ev.kind === 'timeout') toastMsg('⏰', '¡Tiempo!', 'Se alcanzó el máximo de 2 h 10 min. Aquí tenéis el informe.');
     if (ev.kind === 'achievement') {
       const a = ev.achievement;
       toastMsg(ACH_ICONS[a.key] || '🏆', `${a.title}${a.user ? ` · ${a.user}` : ''}`, a.desc);
@@ -582,7 +604,8 @@
   function drawLive() {
     if (!state || state.phase !== 'live') return;
     drawChart($('#chart'), $('#tooltip'), ValeGame.perMinute(state.vales, state.startedAt, Date.now()));
-    $('#timer').textContent = `⏱ ${fmtDur(Date.now() - state.startedAt)}`;
+    const left = (state.config.maxMs || 130 * 60000) - (Date.now() - state.startedAt);
+    $('#timer').textContent = `⏱ ${fmtDur(Date.now() - state.startedAt)}` + (left < 10 * 60000 ? ` · quedan ${Math.max(0, Math.ceil(left / 60000))} min` : '');
   }
   setInterval(drawLive, 1000);
 
@@ -600,7 +623,13 @@
     g.clearRect(0, 0, W, H);
 
     const padL = 28, padB = 22, padT = 10;
-    const max = Math.max(3, ...bins);
+    // Charlas largas: bloques de 5 minutos para que quepa entera.
+    const group = bins.length > 30 ? 5 : 1;
+    const shown = [];
+    for (let i = 0; i < bins.length; i += group) shown.push(bins.slice(i, i + group).reduce((a, b) => a + b, 0));
+    const max = Math.max(3, ...shown);
+    const title = canvas.closest('.card')?.querySelector('h2');
+    if (title) title.textContent = group === 1 ? '📊 Vales por minuto' : '📊 Vales cada 5 minutos';
     const step = max <= 5 ? 1 : Math.ceil(max / 4);
     const plotH = H - padB - padT, plotW = W - padL - 4;
     const y = (v) => padT + plotH - (v / max) * plotH;
@@ -612,8 +641,6 @@
       g.textAlign = 'right'; g.fillText(v, padL - 6, y(v) + 4);
     }
 
-    const shown = bins.slice(-30);
-    const offset = bins.length - shown.length;
     const slot = plotW / Math.max(shown.length, 10);
     const bw = Math.max(4, Math.min(36, slot - 4));
     const bars = [];
@@ -629,11 +656,13 @@
         g.quadraticCurveTo(x + bw, top, x + bw, top + r); g.lineTo(x + bw, base);
         g.fill();
       }
-      const minute = offset + i + 1;
-      if (shown.length <= 12 || minute % 5 === 0 || i === 0) {
+      const minute = i * group + 1;
+      const every = group === 1 ? 5 : 30;
+      if (shown.length <= 12 || (minute - 1) % every === 0) {
         g.fillStyle = ink; g.textAlign = 'center'; g.fillText(minute, x + bw / 2, H - 5);
       }
-      bars.push({ x: padL + i * slot, w: slot, v, minute, top });
+      const label = group === 1 ? `Minuto ${minute}` : `Minutos ${minute}–${Math.min(minute + group - 1, bins.length)}`;
+      bars.push({ x: padL + i * slot, w: slot, v, label, top });
     });
 
     canvas.onpointermove = (e) => {
@@ -641,7 +670,7 @@
       const b = bars.find((b) => px >= b.x && px < b.x + b.w);
       if (!b) return tip.classList.add('hidden');
       tip.classList.remove('hidden');
-      tip.innerHTML = `<b>Minuto ${b.minute}</b> · ${b.v} ${b.v === 1 ? 'vale' : 'vales'}`;
+      tip.innerHTML = `<b>${b.label}</b> · ${b.v} ${b.v === 1 ? 'vale' : 'vales'}`;
       tip.style.left = `${b.x + b.w / 2}px`;
       tip.style.top = `${Math.min(b.top, padT + plotH - 4)}px`;
     };
@@ -651,7 +680,8 @@
   // ---------- util ----------
   function fmtDur(ms) {
     const s = Math.max(0, Math.round(ms / 1000));
-    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = String(s % 60).padStart(2, '0');
+    return h ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`;
   }
   function esc(s) {
     return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

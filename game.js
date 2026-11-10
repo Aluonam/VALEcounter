@@ -14,7 +14,8 @@
     oraculo: { title: 'Oráculo', desc: 'Clavó la apuesta exacta.' },
   };
 
-  const DEFAULTS = { consensus: 2, windowMs: 2000, cooldownMs: 900, silenceMs: 120000 };
+  // maxMs: duración máxima de la charla (2 h 10 min); al llegar se cierra sola.
+  const DEFAULTS = { consensus: 2, windowMs: 2000, cooldownMs: 900, silenceMs: 120000, maxMs: 130 * 60000 };
 
   class Game {
     constructor(opts = {}) {
@@ -40,7 +41,7 @@
         vales: [],
         achievements: [],
         report: null,
-        config: { consensus: this.cfg.consensus, windowMs: this.cfg.windowMs },
+        config: { consensus: this.cfg.consensus, windowMs: this.cfg.windowMs, maxMs: this.cfg.maxMs },
       };
     }
 
@@ -98,6 +99,7 @@
       const user = s.users[id];
       if (s.phase !== 'live' || !user) return;
       const t = this.now();
+      if (t - s.startedAt >= this.cfg.maxMs) return this.tick();
       user.taps++;
 
       // Rezagado de un vale que ya se contó.
@@ -126,7 +128,12 @@
     // Llamar periódicamente (p. ej. cada 5 s) para el logro de silencio.
     tick() {
       const s = this.state;
-      if (s.phase !== 'live' || this.silenceAwarded) return;
+      if (s.phase !== 'live') return;
+      if (this.now() - s.startedAt >= this.cfg.maxMs) {
+        this.onEvent({ kind: 'timeout', maxMs: this.cfg.maxMs });
+        return this.finish();
+      }
+      if (this.silenceAwarded) return;
       const since = s.vales.length ? s.vales[s.vales.length - 1].t : s.startedAt;
       if (this.now() - since >= this.cfg.silenceMs) {
         this.silenceAwarded = true;
@@ -139,7 +146,7 @@
       const s = this.state;
       if (s.phase !== 'live') return;
       s.phase = 'finished';
-      s.finishedAt = this.now();
+      s.finishedAt = Math.min(this.now(), s.startedAt + this.cfg.maxMs);
       s.report = this._report();
       for (const w of s.report.betWinners) if (w.diff === 0) this._unlock('oraculo', w.id);
       s.report.achievements = s.achievements.slice();
