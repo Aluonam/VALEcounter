@@ -9,10 +9,10 @@ Pensado para equipos de unas 10 personas, cada uno con su móvil. No hace falta 
 
 1. **Cualquiera del grupo** abre la web y pulsa *Crear sala de grupo*. Sale un código de 4 caracteres y un QR.
 2. **El resto** escanea el QR o escribe el código, pone su nombre y **apuesta** cuántos «vales» caerán.
-3. Cualquiera escribe quién presenta y pulsa **¡Que empiece el show!** El ponente no necesita hacer nada.
+3. Cuando arranca la charla, cualquiera pulsa **¡Que empiece el show!** El ponente no necesita hacer nada: lo que cuenta es quién caza cada «vale».
 4. Cada vez que oyes un «vale», pulsas el botón gigante (o la barra espaciadora).
    **Solo cuenta si al menos 2 personas pulsan en menos de 2 segundos.** Así se evitan los graciosos.
-5. Al terminar se genera un **informe final** que se puede copiar en Markdown y pegar en Slack, Teams o el README.
+5. Al terminar, o como mucho a las **2 h 10 min**, que se cierra sola, se genera un **informe final** que se puede copiar en Markdown y pegar en Slack, Teams o el README.
 
 ## Partida de muestra
 
@@ -33,6 +33,8 @@ Mensajes de error:
 | ![](docs/demo/01-error-sin-codigo.png) | ![](docs/demo/02-error-codigo-invalido.png) | ![](docs/demo/03-error-sala-no-existe.png) | ![](docs/demo/04-error-nombre-repetido.png) |
 
 ## Qué tiene
+
+- **Salir**: el botón 🚪 de la cabecera te saca de la sala para crear o entrar en otra. Cada pestaña es una persona distinta, así que se puede probar con varias pestañas del mismo navegador.
 
 - **Consenso**: un «vale» necesita 2 pulsaciones de personas distintas en 2 s. Aviso en vivo de «Fulano ha oído un vale, ¿lo confirmas?».
 - **Apuestas previas**: gana quien más se acerque. Si alguien la clava, desbloquea *Oráculo*.
@@ -75,7 +77,7 @@ Cada persona del equipo puede llevarse una:
 
 - 🔊 Sonidos personalizados por logro.
 - 🃏 Bingo de muletillas («o sea», «¿no?», «básicamente»).
-- 🏛️ Hall of fame histórico por ponente.
+- 🏛️ Hall of fame histórico por participante.
 - 📈 Comparativa entre charlas de la misma persona para ver si mejora.
 - 🌗 Modo claro.
 - 📤 Exportar el informe como imagen para compartir.

@@ -39,4 +39,18 @@ assert.strictEqual(r.podium[0].name, 'B');
 g.reset();
 assert.strictEqual(g.state.phase, 'lobby');
 assert.strictEqual(g.state.users.a.bet, null);
+// Duración máxima: 2 h 10 min
+{
+  let now = 0;
+  const ev = [];
+  const g2 = new Game({ now: () => now, onEvent: (e) => ev.push(e.kind) });
+  g2.join('x', 'X'); g2.join('y', 'Y'); g2.start();
+  now = 130 * 60000 - 1000; g2.tick(); assert.strictEqual(g2.state.phase, 'live');
+  g2.tap('x'); g2.tap('y'); assert.strictEqual(g2.state.vales.length, 1);
+  now = 130 * 60000 + 3000; g2.tap('x');
+  assert.strictEqual(g2.state.phase, 'finished');
+  assert(ev.includes('timeout'));
+  assert.strictEqual(g2.state.report.durationMs, 130 * 60000);
+  assert.strictEqual(g2.state.report.perMinute.length, 130);
+}
 console.log('OK: todas las pruebas pasan');
