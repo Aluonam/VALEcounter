@@ -28,6 +28,7 @@
   }
   let myName = sessionStorage.getItem('vale-name') || '';
   let leaving = false;
+  let shutdown = () => {};
   let state = null;
   let lastCount = null;
   let send = () => {};
@@ -108,11 +109,10 @@
     leaving = true;
     if (isHost) { sessionStorage.removeItem('vale-hosting'); localStorage.removeItem(`vale-host-${room}`); }
     sessionStorage.removeItem('vale-name');
-    location.href = location.pathname;
+    try { shutdown(); } catch {}
+    setTimeout(() => { location.href = location.pathname; }, 300);
   }
 
-  if (sessionStorage.getItem('vale-hosting') === room) startHost();
-  else startPlayer();
 
   function setConn(ok, label) {
     $('#conn').classList.toggle('ok', ok);
@@ -133,7 +133,7 @@
     const E = {
       notfound: ['🤔', `No existe la sala ${room}`, 'Revisa el código o pide el QR a quien creó la sala. Si la acaban de crear, espera unos segundos y reintenta.'],
       closed: ['🚪', `La sala ${room} se ha cerrado`, 'Quien la creó ha cerrado su pestaña o se ha quedado sin conexión. Pedidle que la vuelva a abrir y reintentad.'],
-      nat: ['📡', 'Encontré la sala pero no consigo conectar', 'Algunas redes bloquean la conexión directa entre móviles. Probad todos en la misma wifi y reintentad.'],
+      nat: ['📡', 'Encontré la sala pero no consigo conectar', 'Puede que el móvil de quien la creó tenga la pantalla bloqueada o la app en segundo plano. Pídele que la abra y reintentad. Si sigue fallando, probad en otra red.'],
       server: ['🔌', 'Sin conexión', 'No consigo hablar con el servidor de salas. Revisa tu conexión a internet y reintenta.'],
       browser: ['🧓', 'Navegador no compatible', 'Este navegador no soporta conexiones en tiempo real. Prueba con Chrome, Safari o Firefox actualizados.'],
     }[kind];
@@ -147,8 +147,21 @@
   $('#err-retry').onclick = () => location.reload();
   $('#err-other').onclick = () => goLanding(null, room);
 
+  // ---------- Conexión ----------
+  // Dos vías en paralelo para que funcione en cualquier red:
+  //  1) WebRTC directo entre móviles (PeerJS). Rápido, pero algunas redes lo bloquean.
+  //  2) Relé por un servidor MQTT público sobre WebSocket seguro. Funciona aunque
+  //     la conexión directa falle. Se usan dos servidores por si uno cae.
+  // Cada mensaje del anfitrión lleva sid (sesión) + seq para descartar duplicados.
+  var BROKERS = ['wss://broker.hivemq.com:8884/mqtt', 'wss://broker.emqx.io:8084/mqtt'];
+  var TOPIC = `valecounter/v1/${room}`;
+  var HAS_MQTT = typeof mqtt !== 'undefined';
+  // Diagnóstico: añade ?debug a la URL y mira la consola del navegador.
+  function dbg(...a) { if (params.has('debug')) console.log('[vale]', ...a); }
+  function mqttClient(url, opts = {}) { return mqtt.connect(url, { reconnectPeriod: 3000, connectTimeout: 8000, clean: true, ...opts }); }
+
   // --- Quien crea la sala: guarda el estado y reparte ---
-  function startHost(retry = 0) {
+  function startHost() {
     isHost = true;
     connecting('Abriendo la sala…', `Código ${room}`);
     const storeKey = `vale-host-${room}`;
@@ -156,8 +169,18 @@
     try { saved = JSON.parse(localStorage.getItem(storeKey)); } catch {}
     if (saved) for (const u of Object.values(saved.users || {})) u.online = u.id === myId;
 
-    const conns = new Set();
-    const broadcast = (msg) => { for (const c of conns) if (c.open) c.send(msg); };
+    const SID = Math.random().toString(36).slice(2, 10);
+    let seq = 0;
+    const conns = new Set(); // WebRTC
+    const relayPeers = new Map(); // clave MQTT -> { userId, last }
+    let brokers = [];
+    const publishDown = (m) => { for (const b of brokers) if (b.connected) b.publish(`${TOPIC}/down`, JSON.stringify(m)); };
+    const broadcast = (msg) => {
+      const m = { ...msg, sid: SID, seq: ++seq };
+      for (const c of conns) if (c.open) c.send(m);
+      publishDown(m);
+    };
+
     const game = new ValeGame.Game({
       state: saved || undefined,
       onEvent: (event) => { broadcast({ type: 'event', event }); onEvent(event); },
@@ -168,135 +191,282 @@
       },
     });
     setInterval(() => game.tick(), 5000);
+    // Latido: así cada móvil sabe que la sala sigue viva.
+    setInterval(() => {
+      const beat = { type: 'beat', sid: SID };
+      for (const c of conns) if (c.open) c.send(beat);
+      publishDown(beat);
+    }, 5000);
 
     const me = { userId: myId };
     send = (msg) => handle(me, msg);
+    const handled = new Set();
     function handle(conn, msg) {
+      // Cada mensaje de un móvil llega por las dos vías: se procesa una sola vez.
+      if (msg.mid) {
+        if (handled.has(msg.mid)) return;
+        handled.add(msg.mid);
+        if (handled.size > 3000) handled.delete(handled.values().next().value);
+      }
       switch (msg.type) {
         case 'join': conn.userId = msg.id; game.join(msg.id, msg.name); break;
         case 'bet': game.bet(conn.userId, msg.n); break;
         case 'tap': game.tap(conn.userId); break;
-        case 'start': game.start(msg.speaker); break;
+        case 'start': game.start(); break;
         case 'finish': game.finish(); break;
         case 'reset': game.reset(); break;
       }
+    }
+    const stillConnected = (userId) =>
+      userId === myId || [...conns].some((c) => c.open && c.userId === userId) || [...relayPeers.values()].some((p) => p.userId === userId);
+    const dropRelay = (key) => {
+      const p = relayPeers.get(key);
+      relayPeers.delete(key);
+      if (p && p.userId && !stillConnected(p.userId)) game.setOnline(p.userId, false);
+    };
+    setInterval(() => { const now = Date.now(); for (const [k, p] of relayPeers) if (now - p.last > 30000) dropRelay(k); }, 10000);
+
+    let ready = false;
+    let failTimer = setTimeout(() => { if (!ready) showError('server'); }, 15000);
+    function hostReady() {
+      if (ready) return;
+      ready = true;
+      clearTimeout(failTimer);
+      setConn(true, 'Sala abierta');
+      banner('');
+      if (myName) game.join(myId, myName);
+      render(game.publicState());
+      broadcast({ type: 'state', state: game.publicState() });
     }
 
     window.addEventListener('beforeunload', (e) => {
       if (!leaving && state && state.phase !== 'finished' && Object.keys(state.users).length > 1) { e.preventDefault(); e.returnValue = ''; }
     });
+    keepScreenOn();
 
-    const peer = new Peer(PEER_PREFIX + room);
-    peer.on('open', () => {
-      setConn(true, 'Sala abierta');
-      banner('');
-      if (myName) game.join(myId, myName);
-      render(game.publicState());
-    });
-    peer.on('connection', (conn) => {
-      conns.add(conn);
-      conn.on('open', () => conn.send({ type: 'state', state: game.publicState() }));
-      conn.on('data', (msg) => handle(conn, msg));
-      conn.on('close', () => {
-        conns.delete(conn);
-        if (conn.userId && ![...conns].some((c) => c.userId === conn.userId)) game.setOnline(conn.userId, false);
+    // Vía 2: relé MQTT
+    if (HAS_MQTT) {
+      brokers = BROKERS.map((url) => {
+        const c = mqttClient(url, { will: { topic: `${TOPIC}/alive`, payload: 'closed', retain: true, qos: 1 } });
+        c.on('connect', () => {
+          dbg('anfitrión: relé conectado', url);
+          c.subscribe(`${TOPIC}/up`, () => {
+            c.publish(`${TOPIC}/alive`, SID, { retain: true, qos: 1 });
+            if (ready) broadcast({ type: 'state', state: game.publicState() });
+            hostReady();
+          });
+        });
+        c.on('message', (_t, buf) => {
+          dbg('anfitrión: relé recibido', buf.toString().slice(0, 60));
+          let m;
+          try { m = JSON.parse(buf.toString()); } catch { return; }
+          if (!m || typeof m.from !== 'string' || !m.msg || typeof m.msg.type !== 'string') return;
+          let p = relayPeers.get(m.from);
+          if (!p) relayPeers.set(m.from, (p = { userId: null }));
+          p.last = Date.now();
+          if (m.id && game.state.users[m.id]) {
+            p.userId = m.id;
+            if (!game.state.users[m.id].online) game.setOnline(m.id, true);
+          }
+          if (m.msg.type === 'hello') return broadcast({ type: 'state', state: game.publicState() });
+          if (m.msg.type === 'ping') return;
+          if (m.msg.type === 'bye') return dropRelay(m.from);
+          handle(p, m.msg);
+        });
+        return c;
       });
-    });
-    peer.on('disconnected', () => {
-      setConn(false, 'Reconectando…');
-      banner('Se ha cortado la conexión con el servidor de salas. Reconectando…');
-      setTimeout(() => !peer.destroyed && peer.reconnect(), 2000);
-    });
-    peer.on('error', (err) => {
-      if (err.type === 'unavailable-id') {
-        peer.destroy();
-        // Tras recargar, el servidor tarda unos segundos en liberar el código.
-        if (retry < 4) {
-          connecting('Abriendo la sala…', 'Recuperando tu sala, un momento…');
-          setTimeout(() => startHost(retry + 1), 2500);
-        } else {
-          // Otra pestaña o dispositivo ya la tiene abierta: entra como uno más.
-          isHost = false;
-          startPlayer();
-        }
-      } else if (err.type === 'browser-incompatible') showError('browser');
-      else if (['network', 'server-error', 'socket-error', 'socket-closed'].includes(err.type)) {
-        setConn(false, 'Sin conexión');
-        if (state) banner('Sin conexión con el servidor de salas. Reintentando…', true);
-        else showError('server');
-      }
-    });
+    }
+
+    shutdown = () => {
+      for (const b of brokers) { if (b.connected) b.publish(`${TOPIC}/alive`, 'closed', { retain: true, qos: 1 }); }
+      // Sin cerrar a mano: al irse la página, el servidor publica también el mensaje de despedida.
+    };
+
+    // Vía 1: WebRTC directo
+    function openPeer(retry = 0) {
+      const peer = new Peer(PEER_PREFIX + room);
+      peer.on('open', hostReady);
+      peer.on('connection', (conn) => {
+        conns.add(conn);
+        conn.on('open', () => conn.send({ type: 'state', state: game.publicState(), sid: SID, seq }));
+        conn.on('data', (msg) => handle(conn, msg));
+        conn.on('close', () => {
+          conns.delete(conn);
+          if (conn.userId && !stillConnected(conn.userId)) game.setOnline(conn.userId, false);
+        });
+      });
+      peer.on('disconnected', () => setTimeout(() => !peer.destroyed && peer.reconnect(), 2000));
+      peer.on('error', (err) => {
+        if (err.type === 'unavailable-id') {
+          peer.destroy();
+          // Tras recargar, el servidor tarda unos segundos en liberar el código.
+          if (retry < 4) {
+            if (!ready) connecting('Abriendo la sala…', 'Recuperando tu sala, un momento…');
+            setTimeout(() => openPeer(retry + 1), 2500);
+          } else if (!ready) {
+            // Otro dispositivo tiene la sala abierta: entra como uno más.
+            sessionStorage.removeItem('vale-hosting');
+            location.reload();
+          }
+        } else if (err.type === 'browser-incompatible') showError('browser');
+      });
+    }
+    openPeer();
   }
 
   // --- Resto de personas ---
   function startPlayer() {
     connecting(`Buscando la sala ${room}…`);
-    let conn = null;
-    let everConnected = false;
-    let misses = 0;
-    let openTimer = null;
+    const key = `${myId}-${Math.random().toString(36).slice(2, 6)}`;
     const outbox = [];
-    send = (msg) => (conn && conn.open ? conn.send(msg) : outbox.push(msg));
-
-    // PeerJS solo avisa una vez de «peer-unavailable» por cliente: cada reintento usa uno nuevo.
+    const seen = new Set();
+    let lastSid = null;
+    let lastStateSeq = 0;
+    let lastMsgAt = 0;
+    let everConnected = false;
+    // Marca guardada en el relé: null sin dato, 'closed' cerrada, otro valor = abierta.
+    // (No vale un mensaje vacío: en MQTT eso borra la marca en vez de guardarla.)
+    let aliveSid = null;
+    const roomOpen = () => !!aliveSid && aliveSid !== 'closed';
+    let p2pMissing = false;
+    let conn = null;
     let peer = null;
+    const mqs = [];
+
+    let mids = 0;
+    function sendNow(msg) {
+      // Se manda por las dos vías a la vez: si una está caída sin saberlo, llega por la otra.
+      const m = msg.mid ? msg : { ...msg, mid: `${key}:${++mids}` };
+      let sent = false;
+      if (conn && conn.open) { try { conn.send(m); sent = true; } catch {} }
+      for (const c of mqs) if (c.connected) { c.publish(`${TOPIC}/up`, JSON.stringify({ from: key, id: myId, msg: m })); sent = true; }
+      return sent;
+    }
+    send = (msg) => { if (!sendNow(msg)) outbox.push(msg); };
+
+    function deliver(m, via) {
+      if (!m || !m.type) return;
+      if (m.type !== 'beat') dbg('entrega', via, m.type, m.seq);
+      if (m.sid && m.sid !== lastSid) { lastSid = m.sid; lastStateSeq = 0; seen.clear(); }
+      lastMsgAt = Date.now();
+      if (!everConnected || $('#banner').textContent) online(via);
+      else setConn(true, conn && conn.open ? 'Conectado (directo)' : 'Conectado por relé');
+      if (m.type === 'beat') return;
+      if (m.seq) {
+        if (seen.has(m.seq)) return;
+        seen.add(m.seq);
+        if (seen.size > 500) seen.delete(seen.values().next().value);
+      }
+      if (m.type === 'state') {
+        if (m.seq && m.seq < lastStateSeq) return;
+        lastStateSeq = m.seq || lastStateSeq;
+        render(m.state);
+      }
+      if (m.type === 'event') onEvent(m.event);
+    }
+
+    function online(via) {
+      const first = !everConnected;
+      everConnected = true;
+      setConn(true, via === 'p2p' ? 'Conectado (directo)' : 'Conectado por relé');
+      banner('');
+      if (first && myName) sendNow({ type: 'join', id: myId, name: myName });
+      while (outbox.length && sendNow(outbox[0])) outbox.shift();
+    }
+
+    // Si en unos segundos no llega nada, decide qué decir.
+    setTimeout(() => {
+      if (everConnected) return;
+      if (!roomOpen() && p2pMissing) showError(aliveSid === 'closed' ? 'closed' : 'notfound');
+    }, 7000);
+    setTimeout(() => { if (!everConnected) showError(roomOpen() ? 'nat' : aliveSid === 'closed' ? 'closed' : p2pMissing ? 'notfound' : 'nat'); }, 16000);
+    // Vigilancia: si la sala deja de dar señales, avisa.
+    setInterval(() => {
+      if (!everConnected) return;
+      const quiet = Date.now() - lastMsgAt;
+      if (quiet > 12000) { setConn(false, 'Reconectando…'); banner('Se ha perdido la conexión con la sala. Reconectando…', true); }
+      // Quien la creó ha salido (o se le cerró la pestaña) y no vuelve.
+      if (quiet > 7000 && aliveSid === 'closed') showError('closed');
+    }, 3000);
+
+    // Vía 2: relé MQTT, conectado a todos los servidores a la vez: si uno no
+    // entrega mensajes, llegan por el otro (los duplicados se descartan).
+    if (HAS_MQTT) {
+      const aliveBy = {};
+      for (const url of BROKERS) {
+        const c = mqttClient(url, { will: { topic: `${TOPIC}/up`, payload: JSON.stringify({ from: key, id: myId, msg: { type: 'bye' } }), qos: 0 } });
+        mqs.push(c);
+        dbg('relé: conectando a', url);
+        c.on('error', (e) => dbg('relé: error', url, e && e.message));
+        c.on('connect', () => {
+          dbg('relé: conectado a', url);
+          c.subscribe([`${TOPIC}/down`, `${TOPIC}/alive`], () => {
+            relayOne(c, { type: 'hello' });
+            if (everConnected && myName) relayOne(c, { type: 'join', id: myId, name: myName });
+          });
+        });
+        c.on('message', (topic, buf) => {
+          const text = buf.toString();
+          dbg('relé: recibido', url, topic.split('/').pop(), text.slice(0, 50));
+          if (topic.endsWith('/alive')) {
+            aliveBy[url] = text;
+            const v = Object.values(aliveBy);
+            aliveSid = v.find((x) => x && x !== 'closed') || (v.includes('closed') ? 'closed' : null);
+            return;
+          }
+          try { deliver(JSON.parse(text), 'relay'); } catch {}
+        });
+      }
+      const relayOne = (c, msg) => c.connected && c.publish(`${TOPIC}/up`, JSON.stringify({ from: key, id: myId, msg }));
+      const sendRelay = (msg) => mqs.forEach((c) => relayOne(c, msg));
+      setInterval(() => sendRelay({ type: 'ping' }), 10000);
+      shutdown = () => sendRelay({ type: 'bye' });
+    }
+
+    // Vía 1: WebRTC directo. Si falla, se reintenta en segundo plano.
+    // PeerJS solo avisa una vez de «peer-unavailable» por cliente: cada reintento usa uno nuevo.
+    let retryDelay = 3000;
     function makePeer() {
       if (peer) peer.destroy();
       const pr = (peer = new Peer());
-      pr.on('open', dial);
+      pr.on('open', () => dial(pr));
       pr.on('disconnected', () => setTimeout(() => pr === peer && !pr.destroyed && pr.reconnect(), 2000));
-      pr.on('error', onPeerError);
+      pr.on('error', (err) => {
+        if (pr !== peer) return;
+        if (err.type === 'browser-incompatible' && !HAS_MQTT) return showError('browser');
+        if (err.type === 'peer-unavailable') p2pMissing = true;
+        retryP2P();
+      });
+    }
+    function retryP2P() {
+      setTimeout(makePeer, retryDelay);
+      retryDelay = Math.min(30000, retryDelay * 2);
+    }
+    function dial(pr) {
+      const c = pr.connect(PEER_PREFIX + room, { reliable: true, serialization: 'json' });
+      const t = setTimeout(() => { if (!c.open && pr === peer) retryP2P(); }, 12000);
+      c.on('open', () => {
+        clearTimeout(t);
+        retryDelay = 3000;
+        p2pMissing = false;
+        conn = c;
+        if (myName) c.send({ type: 'join', id: myId, name: myName });
+      });
+      c.on('data', (m) => deliver(m, 'p2p'));
+      c.on('close', () => { clearTimeout(t); if (conn === c) { conn = null; retryP2P(); } });
     }
     makePeer();
-    function onPeerError(err) {
-      if (err.type === 'peer-unavailable') {
-        clearTimeout(openTimer);
-        misses++;
-        if (!everConnected && misses >= 2) return showError('notfound');
-        if (everConnected && misses >= 10) return showError('closed');
-        if (everConnected) banner('Se ha perdido la conexión con la sala. Reconectando…', true);
-        else connecting(`Buscando la sala ${room}…`, 'Todavía no la encuentro, sigo intentándolo.');
-        setTimeout(makePeer, 2500);
-      } else if (err.type === 'browser-incompatible') showError('browser');
-      else if (['network', 'server-error', 'socket-error', 'socket-closed'].includes(err.type)) {
-        setConn(false, 'Sin conexión');
-        if (everConnected) banner('Sin conexión a internet. Reintentando…', true);
-        else showError('server');
-      }
-    }
+  }
 
-    function dial() {
-      if (peer.destroyed || peer.disconnected) return setTimeout(dial, 1500);
-      if (conn) { conn.removeAllListeners(); conn.close(); }
-      const c = (conn = peer.connect(PEER_PREFIX + room, { reliable: true, serialization: 'json' }));
-      clearTimeout(openTimer);
-      // El servidor solo avisa una vez de que una sala no existe: si ya avisó y el
-      // reintento no responde, la sala no está. Si nunca avisó, es la red.
-      openTimer = setTimeout(() => {
-        if (c.open) return;
-        if (!everConnected) return showError(misses > 0 ? 'notfound' : 'nat');
-        onPeerError({ type: 'peer-unavailable' });
-      }, misses > 0 ? 6000 : 15000);
-      c.on('open', () => {
-        clearTimeout(openTimer);
-        everConnected = true;
-        misses = 0;
-        setConn(true, 'Conectado');
-        banner('');
-        if (myName) c.send({ type: 'join', id: myId, name: myName });
-        while (outbox.length) c.send(outbox.shift());
+  // Pide al móvil que no apague la pantalla: si se bloquea, la sala se congela.
+  async function keepScreenOn() {
+    try {
+      if (!('wakeLock' in navigator)) return;
+      await navigator.wakeLock.request('screen');
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') navigator.wakeLock.request('screen').catch(() => {});
       });
-      c.on('data', (msg) => {
-        if (msg.type === 'state') render(msg.state);
-        if (msg.type === 'event') onEvent(msg.event);
-      });
-      c.on('close', () => {
-        if (c !== conn) return;
-        setConn(false, 'Reconectando…');
-        banner('Se ha perdido la conexión con la sala. Reconectando…', true);
-        setTimeout(dial, 1500);
-      });
-    }
+    } catch {}
   }
 
   // ---------- Formularios ----------
@@ -686,4 +856,7 @@
   function esc(s) {
     return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
+  // Arranque: al final, cuando ya está todo definido.
+  if (sessionStorage.getItem('vale-hosting') === room) startHost();
+  else startPlayer();
 })();
