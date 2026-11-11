@@ -255,6 +255,13 @@ dialog.invite form { margin-top: 14px; }
 .toast b { font-family: var(--display); font-weight: 400; font-size: 1.15rem; }
 .toast small { display: block; color: var(--ink-soft); }
 
+.disclaimer {
+  margin: 36px auto 0; max-width: 520px; text-align: center; font-size: 0.85rem; line-height: 1.4;
+  color: var(--ink-soft); background: rgba(255, 255, 255, 0.7); border: 2px dashed var(--ink-soft);
+  border-radius: 14px; padding: 10px 14px;
+}
+.disclaimer b { color: var(--ink); }
+
 #confetti { position: fixed; inset: 0; pointer-events: none; z-index: 30; }
 
 /* ---------- animaciones ---------- */

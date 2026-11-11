@@ -5,6 +5,8 @@
 Contador colaborativo, en tiempo real, de las veces que un ponente dice **«vale»**.
 Pensado para equipos de unas 10 personas, cada uno con su móvil. No hace falta proyector ni cuenta.
 
+> 🤝 **Sin ánimo de ofender.** VALEcounter es un juego interno para reírnos juntos y reforzar la unión y la cohesión del equipo. No pretende juzgar ni ridiculizar a nadie: todos tenemos muletillas, y «vale» es de las más simpáticas. Si a quien presenta no le apetece, no se juega.
+
 ## Cómo se juega
 
 1. **Cualquiera del grupo** abre la web y pulsa *Crear sala de grupo*. Sale un código de 4 caracteres y un QR.
