@@ -50,11 +50,13 @@ Mensajes de error:
 Web 100 % estática en JavaScript puro, sin backend ni base de datos.
 
 - El móvil de quien crea la sala ejecuta el juego ([`public/game.js`](public/game.js)) y reparte el estado. En pantalla juega como uno más.
-- Los demás se conectan a él por WebRTC con [PeerJS](https://peerjs.com/), usando su servidor público de señalización.
+- Los demás se conectan a él por dos vías a la vez: WebRTC directo con [PeerJS](https://peerjs.com/) y, como respaldo, un relé MQTT público sobre WebSocket seguro (HiveMQ y EMQX). Si una red bloquea la conexión directa, todo sigue por el relé. Los mensajes llevan número de orden para no contar nada dos veces.
+- Diagnóstico: añade `?debug` a la URL y mira la consola del navegador.
+- Los mensajes del relé pasan por servidores públicos: solo contienen nombres y pulsaciones, nada sensible.
 - El estado se guarda en el `localStorage` de ese móvil: si recarga la página, la partida sigue y los demás se reconectan solos.
 
 > ⚠️ Quien crea la sala no debe cerrar la pestaña hasta el informe final. La app le avisa.
-> Si alguna red corporativa bloquea WebRTC, conectad los móviles a la misma wifi.
+> Quien crea la sala debe tener la pantalla encendida y la app delante: si el móvil se bloquea, la sala se congela. La app pide al móvil que no apague la pantalla.
 
 ## Desarrollo
 
